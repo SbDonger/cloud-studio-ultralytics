@@ -203,3 +203,24 @@ calibration_*.npy
 # Training logs
 args.yaml
 results.csv
+
+# Conda environments
+conda/
+
+# Editor swap/backup files
+*.swp
+*.swo
+*~
+*.bak
+*.tmp
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Node.js (if any frontend tools)
+node_modules/
+
+# macOS
+.AppleDouble
+.LSOverride
