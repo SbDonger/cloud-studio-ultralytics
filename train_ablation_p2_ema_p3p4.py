@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 
 if __name__ == "__main__":
-    model = YOLO("ultralytics/cfg/models/11/yolo11-p2-ema-res.yaml")
+    model = YOLO("ultralytics/cfg/models/11/yolo11-p2-ema-p3-p4.yaml")
     model.load("yolo11n.pt")
 
     results = model.train(
@@ -29,5 +29,5 @@ if __name__ == "__main__":
         deterministic=True,
 
         project="VisDrone_Thesis_150e",
-        name="yolo11n_p2_ema_res_150e",
+        name="yolo11n_p2_ema_p3p4_150e",
     )
