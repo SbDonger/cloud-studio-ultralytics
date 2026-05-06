@@ -1,7 +1,6 @@
 from ultralytics import YOLO
 
-if __name__ == '__main__':
-    # 消融实验：P2 + CBAM（不含 WIoU，使用默认 CIoU）
+if __name__ == "__main__":
     model = YOLO("ultralytics/cfg/models/11/yolo11-p2-cbam.yaml")
     model.load("yolo11n.pt")
 
@@ -11,13 +10,24 @@ if __name__ == '__main__':
         imgsz=640,
         batch=16,
         device=0,
-        amp=True,
-        workers=4,
+
+        optimizer="SGD",
+        lr0=0.01,
+        lrf=0.01,
+        momentum=0.937,
+        weight_decay=0.0005,
         cos_lr=True,
-        patience=20,
+
+        amp=True,
+        workers=8,
+        patience=0,
         close_mosaic=10,
         mixup=0.0,
         copy_paste=0.0,
-        project="VisDrone_Thesis",
-        name="yolo11n_p2_cbam",
+
+        seed=0,
+        deterministic=True,
+
+        project="VisDrone_Thesis_150e",
+        name="yolo11n_p2_cbam_150e",
     )

@@ -13,6 +13,7 @@ __all__ = (
     "CBAM",
     "ChannelAttention",
     "Concat",
+    "EMA",
     "Conv",
     "Conv2",
     "ConvTranspose",
@@ -615,7 +616,79 @@ class CBAM(nn.Module):
         if self.channel_attention is None:
             self._build(x.shape[1])
         return self.spatial_attention(self.channel_attention(x))
-        return self.spatial_attention(self.channel_attention(x))
+
+
+class EMA(nn.Module):
+    """Efficient Multi-Scale Attention Module.
+
+    EMA uses two parallel branches with cross-spatial learning to model channel-spatial
+    joint attention efficiently. Input channels are reshaped into groups, and shared
+    lightweight convolutions process each group, making the module parameter-efficient.
+
+    Reference: https://arxiv.org/abs/2305.13563v2 (Ouyang et al., ICASSP 2023)
+
+    Args:
+        channels (int): Input channels, supplied by Ultralytics parse_model.
+        factor (int): Number of channel groups (channels must be divisible by factor).
+    """
+
+    def __init__(self, channels, factor=8):
+        """Initialize EMA module.
+
+        Args:
+            channels (int): Number of input channels.
+            factor (int): Number of groups for multi-scale feature splitting.
+        """
+        super().__init__()
+        self.groups = factor
+        if channels % self.groups != 0:
+            raise ValueError(f"channels {channels} must be divisible by groups {self.groups}")
+
+        group_channels = channels // self.groups
+
+        self.softmax = nn.Softmax(dim=-1)
+        self.agp = nn.AdaptiveAvgPool2d((1, 1))
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
+
+        self.group_norm = nn.GroupNorm(group_channels, group_channels)
+        self.conv1x1 = nn.Conv2d(group_channels, group_channels, kernel_size=1, stride=1, padding=0)
+        self.conv3x3 = nn.Conv2d(group_channels, group_channels, kernel_size=3, stride=1, padding=1)
+
+    def forward(self, x):
+        """Apply Efficient Multi-Scale Attention to input tensor.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, C, H, W).
+
+        Returns:
+            (torch.Tensor): Attention-enhanced output tensor of same shape.
+        """
+        b, c, h, w = x.size()
+        group_channels = c // self.groups
+
+        group_x = x.reshape(b * self.groups, group_channels, h, w)
+
+        # Cross-spatial encoding: pool H and W, concatenate, process with conv1x1
+        x_h = self.pool_h(group_x)  # (b*G, gc, H, 1)
+        x_w = self.pool_w(group_x).permute(0, 1, 3, 2)  # (b*G, gc, W, 1)
+        hw = self.conv1x1(torch.cat([x_h, x_w], dim=2))  # (b*G, gc, H+W, 1)
+        x_h, x_w = torch.split(hw, [h, w], dim=2)
+
+        # Branch 1: spatial-attention-weighted features + GroupNorm
+        x1 = self.group_norm(group_x * x_h.sigmoid() * x_w.permute(0, 1, 3, 2).sigmoid())
+        # Branch 2: 3x3 conv features
+        x2 = self.conv3x3(group_x)
+
+        # Cross-branch interaction via matrix multiplication
+        x11 = self.softmax(self.agp(x1).reshape(b * self.groups, group_channels, 1).permute(0, 2, 1))
+        x12 = x2.reshape(b * self.groups, group_channels, h * w)
+        x21 = self.softmax(self.agp(x2).reshape(b * self.groups, group_channels, 1).permute(0, 2, 1))
+        x22 = x1.reshape(b * self.groups, group_channels, h * w)
+
+        weights = (torch.matmul(x11, x12) + torch.matmul(x21, x22)).reshape(b * self.groups, 1, h, w)
+
+        return (group_x * weights.sigmoid()).reshape(b, c, h, w)
 
 
 class Concat(nn.Module):
