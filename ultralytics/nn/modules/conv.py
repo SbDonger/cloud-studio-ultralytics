@@ -692,6 +692,58 @@ class EMA(nn.Module):
         return x + out
 
 
+class EMANoRes(nn.Module):
+    """Efficient Multi-Scale Attention Module (no residual connection).
+
+    Same as EMA but without the residual shortcut. The output is purely the
+    attention-weighted features: group_x * sigmoid(weights). This is the
+    original formulation from the paper without additive residual.
+
+    Use this variant when EMA is placed after the complete FPN+PAN path,
+    right before the Detect head, to avoid disrupting feature fusion.
+    """
+
+    def __init__(self, channels, factor=8):
+        super().__init__()
+        self.groups = factor
+        if channels % self.groups != 0:
+            raise ValueError(f"channels {channels} must be divisible by groups {self.groups}")
+
+        group_channels = channels // self.groups
+
+        self.softmax = nn.Softmax(dim=-1)
+        self.agp = nn.AdaptiveAvgPool2d((1, 1))
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
+
+        self.group_norm = nn.GroupNorm(group_channels, group_channels)
+        self.conv1x1 = nn.Conv2d(group_channels, group_channels, kernel_size=1, stride=1, padding=0)
+        self.conv3x3 = nn.Conv2d(group_channels, group_channels, kernel_size=3, stride=1, padding=1)
+
+    def forward(self, x):
+        b, c, h, w = x.size()
+        group_channels = c // self.groups
+
+        group_x = x.reshape(b * self.groups, group_channels, h, w)
+
+        x_h = self.pool_h(group_x)
+        x_w = self.pool_w(group_x).permute(0, 1, 3, 2)
+        hw = self.conv1x1(torch.cat([x_h, x_w], dim=2))
+        x_h, x_w = torch.split(hw, [h, w], dim=2)
+
+        x1 = self.group_norm(group_x * x_h.sigmoid() * x_w.permute(0, 1, 3, 2).sigmoid())
+        x2 = self.conv3x3(group_x)
+
+        x11 = self.softmax(self.agp(x1).reshape(b * self.groups, group_channels, 1).permute(0, 2, 1))
+        x12 = x2.reshape(b * self.groups, group_channels, h * w)
+        x21 = self.softmax(self.agp(x2).reshape(b * self.groups, group_channels, 1).permute(0, 2, 1))
+        x22 = x1.reshape(b * self.groups, group_channels, h * w)
+
+        weights = (torch.matmul(x11, x12) + torch.matmul(x21, x22)).reshape(b * self.groups, 1, h, w)
+
+        return (group_x * weights.sigmoid()).reshape(b, c, h, w)
+
+
 class Concat(nn.Module):
     """Concatenate a list of tensors along specified dimension.
 
