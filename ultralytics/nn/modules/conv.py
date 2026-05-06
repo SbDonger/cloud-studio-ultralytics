@@ -688,7 +688,8 @@ class EMA(nn.Module):
 
         weights = (torch.matmul(x11, x12) + torch.matmul(x21, x22)).reshape(b * self.groups, 1, h, w)
 
-        return (group_x * weights.sigmoid()).reshape(b, c, h, w)
+        out = (group_x * weights.sigmoid()).reshape(b, c, h, w)
+        return x + out
 
 
 class Concat(nn.Module):

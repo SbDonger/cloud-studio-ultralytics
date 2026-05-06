@@ -29,5 +29,5 @@ if __name__ == "__main__":
         deterministic=True,
 
         project="VisDrone_Thesis_150e",
-        name="yolo11n_p2_ema_150e",
+        name="yolo11n_p2_ema_res_150e",
     )
