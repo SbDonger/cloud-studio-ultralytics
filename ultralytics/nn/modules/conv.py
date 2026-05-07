@@ -744,6 +744,63 @@ class EMANoRes(nn.Module):
         return (group_x * weights.sigmoid()).reshape(b, c, h, w)
 
 
+class CA(nn.Module):
+    """Residual Coordinate Attention.
+
+    CA embeds positional information into channel attention via two 1D
+    pooling operations along H and W axes, making it effective for small
+    and dense objects where spatial location matters.
+
+    Unlike EMA, CA does not split channels into groups; instead it encodes
+    features along horizontal and vertical directions separately, explicitly
+    introducing spatial coordinates into channel attention. This is more
+    friendly to small-object detection in dense scenes (e.g. VisDrone).
+
+    The learnable gamma parameter (initialized to 0.1) provides a soft residual
+    shortcut: the module starts with a mild attention boost and learns the
+    optimal enhancement strength during training, without strongly disrupting
+    pretrained features.
+
+    Reference: Hou et al., "Coordinate Attention for Efficient Mobile Network
+    Design", CVPR 2021.
+    """
+
+    def __init__(self, channels, reduction=32):
+        super().__init__()
+        mip = max(8, channels // reduction)
+
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
+
+        self.conv1 = nn.Conv2d(channels, mip, kernel_size=1, stride=1, padding=0)
+        self.bn1 = nn.BatchNorm2d(mip)
+        self.act = nn.SiLU()
+
+        self.conv_h = nn.Conv2d(mip, channels, kernel_size=1, stride=1, padding=0)
+        self.conv_w = nn.Conv2d(mip, channels, kernel_size=1, stride=1, padding=0)
+
+        self.gamma = nn.Parameter(torch.tensor(0.1))
+
+    def forward(self, x):
+        identity = x
+        b, c, h, w = x.size()
+
+        x_h = self.pool_h(x)
+        x_w = self.pool_w(x).permute(0, 1, 3, 2)
+
+        y = torch.cat([x_h, x_w], dim=2)
+        y = self.act(self.bn1(self.conv1(y)))
+
+        x_h, x_w = torch.split(y, [h, w], dim=2)
+        x_w = x_w.permute(0, 1, 3, 2)
+
+        a_h = self.conv_h(x_h).sigmoid()
+        a_w = self.conv_w(x_w).sigmoid()
+
+        out = identity * a_h * a_w
+        return identity + self.gamma * out
+
+
 class Concat(nn.Module):
     """Concatenate a list of tensors along specified dimension.
 

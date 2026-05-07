@@ -61,6 +61,7 @@ from .block import (
     TorchVision,
 )
 from .conv import (
+    CA,
     CBAM,
     ChannelAttention,
     Concat,
@@ -153,6 +154,7 @@ __all__ = (
     "DWConvTranspose2d",
     "EMA",
     "EMANoRes",
+    "CA",
     "DeformableTransformerDecoder",
     "DeformableTransformerDecoderLayer",
     "Detect",

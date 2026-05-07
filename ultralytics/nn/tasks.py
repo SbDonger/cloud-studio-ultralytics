@@ -50,6 +50,7 @@ from ultralytics.nn.modules import (
     DWConvTranspose2d,
     EMA,
     EMANoRes,
+    CA,
     Focus,
     GhostBottleneck,
     GhostConv,
@@ -1717,6 +1718,9 @@ def parse_model(d, ch, verbose=True):
             args = [ch[f], *args]
             c2 = ch[f]
         elif m is EMANoRes:
+            args = [ch[f], *args]
+            c2 = ch[f]
+        elif m is CA:
             args = [ch[f], *args]
             c2 = ch[f]
         elif m in frozenset({TorchVision, Index}):
