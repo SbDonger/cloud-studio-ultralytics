@@ -86,6 +86,8 @@ def bbox_iou(
     DIoU: bool = False,
     CIoU: bool = False,
     WIoU: bool = False,
+    InnerIoU: bool = False,
+    inner_ratio: float = 0.7,
     eps: float = 1e-7,
 ) -> torch.Tensor:
     """Calculate the Intersection over Union (IoU) between bounding boxes.
@@ -118,6 +120,21 @@ def bbox_iou(
         b2_x1, b2_y1, b2_x2, b2_y2 = box2.chunk(4, -1)
         w1, h1 = b1_x2 - b1_x1, b1_y2 - b1_y1 + eps
         w2, h2 = b2_x2 - b2_x1, b2_y2 - b2_y1 + eps
+
+    # Inner-IoU: shrink both boxes toward their centers
+    if InnerIoU:
+        b1_x1 = b1_x1 + w1 * (1 - inner_ratio) / 2
+        b1_x2 = b1_x2 - w1 * (1 - inner_ratio) / 2
+        b1_y1 = b1_y1 + h1 * (1 - inner_ratio) / 2
+        b1_y2 = b1_y2 - h1 * (1 - inner_ratio) / 2
+        b2_x1 = b2_x1 + w2 * (1 - inner_ratio) / 2
+        b2_x2 = b2_x2 - w2 * (1 - inner_ratio) / 2
+        b2_y1 = b2_y1 + h2 * (1 - inner_ratio) / 2
+        b2_y2 = b2_y2 - h2 * (1 - inner_ratio) / 2
+        w1 = b1_x2 - b1_x1 + eps
+        h1 = b1_y2 - b1_y1 + eps
+        w2 = b2_x2 - b2_x1 + eps
+        h2 = b2_y2 - b2_y1 + eps
 
     # Intersection area
     inter = (b1_x2.minimum(b2_x2) - b1_x1.maximum(b2_x1)).clamp_(0) * (
