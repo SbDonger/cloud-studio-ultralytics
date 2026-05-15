@@ -18,7 +18,7 @@ from ultralytics import YOLO
 # ============================================================
 # 配置
 # ============================================================
-PROJECT_DIR = "runs/detect/VisDrone_Thesis_150e"
+PROJECT_DIR = "runs/detect/VisDrone_Thesis_200e"
 DATA = "VisDrone.yaml"
 IMGSZ = 640
 BATCH = 16
